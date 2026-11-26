@@ -110,9 +110,9 @@ export default function NewPatient() {
     set(path, arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item]);
   };
 
-  const required = { name: f.name.trim(), dob: f.dob, phone: f.phone.replace(/\D/g, '').length >= 12, 'dental.complaint': f.dental.complaint.trim() };
+  const required = { name: f.name.trim(), dob: f.dob, phone: f.phone.replace(/\D/g, '').length >= 12 };
   const done = Object.values(required).filter(Boolean).length;
-  const sectionDone = [required.name && required.dob && required.phone, f.medical.conditions.length || f.medical.allergies, required['dental.complaint'], Object.keys(f.chart).length, f.consents.confirmed && f.consents.examination];
+  const sectionDone = [required.name && required.dob && required.phone, f.medical.conditions.length || f.medical.allergies, f.dental.complaint.trim(), Object.keys(f.chart).length, f.consents.confirmed && f.consents.examination];
 
   function toggleTooth(n) {
     const chart = { ...f.chart };
@@ -140,10 +140,9 @@ export default function NewPatient() {
     if (!required.name) e.name = 'Enter the patient’s name';
     if (!required.dob) e.dob = 'Enter date of birth';
     if (!required.phone) e.phone = 'Enter a 10-digit mobile number';
-    if (!required['dental.complaint']) e['dental.complaint'] = 'What brings them in today?';
     setErrors(e);
     if (Object.keys(e).length) {
-      const first = ['name', 'dob', 'phone'].some((k) => e[k]) ? 0 : 2;
+      const first = 0;
       refs.current[first]?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
@@ -154,7 +153,7 @@ export default function NewPatient() {
         ...f,
         files: [],
         status: 'New',
-        visits: [{ date: today(), doctor: DOCTOR, title: 'First visit: registration & examination', text: 'Complaint: ' + f.dental.complaint }],
+        visits: [{ date: today(), doctor: DOCTOR, title: 'First visit: registration & examination', text: f.dental.complaint ? 'Complaint: ' + f.dental.complaint : 'Registered' }],
       });
       if (rawFiles.current.length) await uploadFiles(p.id, rawFiles.current).catch(() => toast('Patient saved, but the files could not be uploaded'));
     } catch {
@@ -242,7 +241,7 @@ export default function NewPatient() {
         <h2>3 · Dental history</h2>
         <div className="desc">Why they came in today, and what’s been done before.</div>
         <div className="fields">
-          <Field label="Chief complaint" req span={4} error={errors['dental.complaint']}>
+          <Field label="Chief complaint" span={4}>
             <textarea {...bind('dental.complaint')} placeholder="In the patient’s words, e.g. ‘Pain on lower left side while chewing’" />
           </Field>
           <Field label="Last dental visit">
@@ -353,8 +352,8 @@ export default function NewPatient() {
 
       <motion.div className="form-actions" initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5, type: 'spring', stiffness: 200, damping: 22 }}>
         <div className="progress-ring">
-          <Ring pct={done / 4} />
-          {done === 4 ? 'Ready to save' : `${done} of 4 required fields`}
+          <Ring pct={done / 3} />
+          {done === 3 ? 'Ready to save' : `${done} of 3 required fields`}
         </div>
         <button className="btn" style={{ border: 0 }} onClick={() => nav(-1)}>Cancel</button>
         <button
