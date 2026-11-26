@@ -1,0 +1,75 @@
+# Daily MongoDB backup (patients, appointments, payments and uploaded files).
+#
+# Setup (once): GitHub repo -> Settings -> Secrets and variables -> Actions ->
+#   New repository secret:
+#     MONGODB_URI      the same connection string as on Vercel
+#     BACKUP_PASSWORD  a long password; backups are encrypted with it (strongly recommended)
+#
+# Backups appear under the repo's Actions tab -> "Database backup" -> a run ->
+# Artifacts, and are kept for 30 days. Keep this repository PRIVATE.
+# Restore steps are in README.md ("Backups").
+
+name: Database backup
+
+on:
+  schedule:
+    - cron: '30 20 * * *' # every day at 02:00 India time (20:30 UTC)
+  workflow_dispatch: # also lets you run it any time with "Run workflow"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - name: Check secrets
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        run: |
+          if [ -z "$MONGODB_URI" ]; then
+            echo "::error::Add the MONGODB_URI secret (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+
+      - name: Install MongoDB Database Tools
+        run: |
+          curl -fsSL -o tools.deb https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.10.0.deb
+          sudo apt-get install -y ./tools.deb
+          mongodump --version
+
+      - name: Dump database
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+        run: |
+          STAMP=$(TZ=Asia/Kolkata date +%Y-%m-%d_%H%M)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          mongodump --uri="$MONGODB_URI" --gzip --archive="dental-$STAMP.archive.gz"
+          ls -lh dental-*.archive.gz
+
+      - name: Encrypt backup
+        env:
+          BACKUP_PASSWORD: ${{ secrets.BACKUP_PASSWORD }}
+        run: |
+          if [ -n "$BACKUP_PASSWORD" ]; then
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSWORD" \
+              --symmetric --cipher-algo AES256 "dental-$STAMP.archive.gz"
+            rm "dental-$STAMP.archive.gz"
+          else
+            echo "::warning::BACKUP_PASSWORD is not set, so this backup is NOT encrypted."
+          fi
+          ls -lh dental-*
+
+      - name: Save backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: dental-backup-${{ env.STAMP }}
+          path: dental-${{ env.STAMP }}.archive.gz*
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
